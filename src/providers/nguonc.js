@@ -1,7 +1,7 @@
 'use strict';
 
 const BaseProvider = require('./base');
-const { getJson, getText, stripHtml, mapImageUrl, cached, parseEpNum } = require('../utils');
+const { getJson, getText, stripHtml, mapImageUrl, cached, parseEpNum, detectAudio } = require('../utils');
 
 // Nguồn NguonC — API công khai https://phim.nguonc.com/api
 // Một số phim trả m3u8 trực tiếp, một số chỉ có link embed StreamC
@@ -77,6 +77,8 @@ class NguoncProvider extends BaseProvider {
     let path = '/films/danh-sach/phim-le';
     if (kind === 'phim-bo') path = '/films/danh-sach/phim-bo';
     else if (kind === 'moi') path = '/films/phim-moi-cap-nhat';
+    else if (kind === 'thuyet-minh') path = '/films/danh-sach/phim-thuyet-minh';
+    else if (kind === 'long-tieng') path = '/films/danh-sach/phim-long-tieng';
     const data = await this.request(`${this.cfg.apiUrl}${path}?page=${page}`);
     const items = (data && data.items) || [];
     return items.map((i) => this.toMeta(toMetaItem(i)));
@@ -173,7 +175,7 @@ class NguoncProvider extends BaseProvider {
       if (!ep) continue;
       const src = await this.extractStreamItem(ep); // tuần tự: ít request song song
       if (!src) continue;
-      const audio = require('../utils').detectAudio(server.serverName, require('../utils').detectAudio(d.lang, 'Vietsub'));
+      const audio = detectAudio(server.serverName, detectAudio(`${d.name || ''} ${d.lang || ''}`, 'Vietsub'));
       streams.push(
         this.makeStream({
           movieName: d.name,
@@ -187,6 +189,44 @@ class NguoncProvider extends BaseProvider {
       );
     }
     return streams;
+  }
+
+  async resolveStream({ title, year, type, season, episode }) {
+    if (!title) return [];
+    const results = await this.search(title);
+    if (!results.length) return [];
+
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/\(thuyết minh\)|\(lồng tiếng\)|\(vietsub\)/gi, '')
+        .replace(/[^a-z0-9\u00C0-\u1EF9]+/g, ' ')
+        .trim();
+
+    const target = norm(title);
+    // Gom tối đa 3 kết quả khớp tên để lấy đủ cả bản Vietsub lẫn bản tách riêng Thuyết Minh / Lồng Tiếng
+    const matched = results
+      .filter((it) => {
+        const n1 = norm(it.name);
+        const n2 = norm(it.originalName);
+        const nameOk = n1 === target || n2 === target || n1.includes(target) || n2.includes(target);
+        const yearOk = !year || !it.year || Math.abs(parseInt(it.year, 10) - parseInt(year, 10)) <= 1;
+        return nameOk && yearOk;
+      })
+      .slice(0, 3);
+
+    const allStreams = [];
+    for (const item of matched) {
+      const s = await this.streamsFromSlug(item.slug, type, season, episode);
+      const titleAudio = detectAudio(`${item.name} ${item.lang || ''}`, '');
+      for (const st of s) {
+        if (titleAudio && titleAudio !== 'Vietsub' && !/thuyết minh|lồng tiếng/i.test(st.title || '')) {
+          st.title = `[${titleAudio}] ${st.title || ''}`;
+        }
+        allStreams.push(st);
+      }
+    }
+    return allStreams;
   }
 
   async streamsFromSlug(slug, type, season, episode) {
