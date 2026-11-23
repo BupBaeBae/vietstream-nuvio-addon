@@ -67,38 +67,54 @@ function parseExtra(str) {
   return extra;
 }
 
-function shouldProxy(providerId) {
+function shouldProxy() {
   const list = CONFIG.proxyProviders;
   if (list && list.includes('none')) return false;
-  // Ép tất cả các nguồn đi qua HLS Proxy để vượt lỗi 403 trên PC/TV & Stremio
   return true;
 }
 
-function wrapProxy(stream, baseUrl) {
-  const pid = stream._providerId;
-  if (stream.url) {
-    const h = (stream.behaviorHints && stream.behaviorHints.proxyHeaders && stream.behaviorHints.proxyHeaders.request) || {};
-    const providerCfg = PROVIDERS[pid] || {};
-    const defaultRef = h.Referer || providerCfg.apiUrl || 'https://phim.nguonc.com/';
-    const defaultOrigin = h.Origin || (defaultRef ? new URL(defaultRef).origin : 'https://phim.nguonc.com');
+function expandStreams(stream, baseUrl) {
+  if (!stream.url) return [stream];
 
-    stream.behaviorHints = {
-      ...(stream.behaviorHints || {}),
-      notWebReady: true,
-      proxyHeaders: {
-        request: {
-          'User-Agent': CONFIG.userAgent,
-          'Referer': defaultRef,
-          'Origin': defaultOrigin
-        }
-      }
-    };
-
-    if (shouldProxy(pid)) {
-      stream.url = `${baseUrl}/hls/manifest.m3u8?url=${b64e(stream.url)}&ref=${b64e(defaultRef)}&origin=${b64e(defaultOrigin)}`;
-    }
+  const h = (stream.behaviorHints && stream.behaviorHints.proxyHeaders && stream.behaviorHints.proxyHeaders.request) || {};
+  const providerCfg = PROVIDERS[stream._providerId] || {};
+  const defaultRef = h.Referer || providerCfg.apiUrl || 'https://phim.nguonc.com/';
+  let defaultOrigin = h.Origin || 'https://phim.nguonc.com';
+  if (!h.Origin && defaultRef) {
+    try {
+      defaultOrigin = new URL(defaultRef).origin;
+    } catch {}
   }
-  return stream;
+
+  const hints = {
+    ...(stream.behaviorHints || {}),
+    notWebReady: true,
+    proxyHeaders: {
+      request: {
+        'User-Agent': CONFIG.userAgent,
+        'Referer': defaultRef,
+        'Origin': defaultOrigin
+      }
+    }
+  };
+
+  // 1. Luồng Direct CDN gốc (dùng cho điện thoại Android, tiết kiệm băng thông Vercel)
+  const directStream = {
+    ...stream,
+    behaviorHints: hints
+  };
+
+  if (!shouldProxy()) return [directStream];
+
+  // 2. Luồng qua HLS Proxy của Vercel (dùng cho Laptop Windows, TV & Stremio để vượt lỗi 403)
+  const proxyStream = {
+    ...stream,
+    name: `${stream.name || 'VietStream'} [Proxy]`,
+    url: `${baseUrl}/hls/manifest.m3u8?url=${b64e(stream.url)}&ref=${b64e(defaultRef)}&origin=${b64e(defaultOrigin)}`,
+    behaviorHints: hints
+  };
+
+  return [directStream, proxyStream];
 }
 
 function dedupe(streams) {
@@ -152,7 +168,7 @@ router.use('/nuvio-plugin', express.static(PLUGIN_DIR));
 router.get('/', (req, res) => {
   const base = getBaseUrl(req);
   const rows = Object.values(providers)
-    .map((p) => `<li><b>${p.name}</b> <code>${p.cfg.apiUrl}</code> (qua proxy)</li>`)
+    .map((p) => `<li><b>${p.name}</b> <code>${p.cfg.apiUrl}</code> (Direct + Proxy)</li>`)
     .join('');
   res.type('html').send(
     `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>VietStream Addon</title>
@@ -201,7 +217,7 @@ router.get('/stream/:type/:id.json', async (req, res) => {
   } catch (e) {
     console.warn('[stream] lỗi:', e.message);
   }
-  streams = dedupe(streams.map((s) => wrapProxy(s, base)));
+  streams = dedupe(streams.flatMap((s) => expandStreams(s, base)));
   res.json({ streams, cacheMaxAge: 600 });
 });
 
