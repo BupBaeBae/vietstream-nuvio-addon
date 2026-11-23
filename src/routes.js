@@ -68,18 +68,35 @@ function parseExtra(str) {
 }
 
 function shouldProxy(providerId) {
-  const cfg = PROVIDERS[providerId];
-  if (!cfg || !cfg.proxy) return false;
   const list = CONFIG.proxyProviders;
-  if (list.includes('none')) return false;
-  return list.includes('*') || list.includes(providerId);
+  if (list && list.includes('none')) return false;
+  // Ép tất cả các nguồn đi qua HLS Proxy để vượt lỗi 403 trên PC/TV & Stremio
+  return true;
 }
 
 function wrapProxy(stream, baseUrl) {
   const pid = stream._providerId;
-  if (stream.url && shouldProxy(pid)) {
+  if (stream.url) {
     const h = (stream.behaviorHints && stream.behaviorHints.proxyHeaders && stream.behaviorHints.proxyHeaders.request) || {};
-    stream.url = `${baseUrl}/hls/manifest.m3u8?url=${b64e(stream.url)}&ref=${b64e(h.Referer || '')}&origin=${b64e(h.Origin || '')}`;
+    const providerCfg = PROVIDERS[pid] || {};
+    const defaultRef = h.Referer || providerCfg.apiUrl || 'https://phim.nguonc.com/';
+    const defaultOrigin = h.Origin || (defaultRef ? new URL(defaultRef).origin : 'https://phim.nguonc.com');
+
+    stream.behaviorHints = {
+      ...(stream.behaviorHints || {}),
+      notWebReady: true,
+      proxyHeaders: {
+        request: {
+          'User-Agent': CONFIG.userAgent,
+          'Referer': defaultRef,
+          'Origin': defaultOrigin
+        }
+      }
+    };
+
+    if (shouldProxy(pid)) {
+      stream.url = `${baseUrl}/hls/manifest.m3u8?url=${b64e(stream.url)}&ref=${b64e(defaultRef)}&origin=${b64e(defaultOrigin)}`;
+    }
   }
   return stream;
 }
@@ -135,7 +152,7 @@ router.use('/nuvio-plugin', express.static(PLUGIN_DIR));
 router.get('/', (req, res) => {
   const base = getBaseUrl(req);
   const rows = Object.values(providers)
-    .map((p) => `<li><b>${p.name}</b> <code>${p.cfg.apiUrl}</code>${p.cfg.proxy ? ' (qua proxy)' : ''}</li>`)
+    .map((p) => `<li><b>${p.name}</b> <code>${p.cfg.apiUrl}</code> (qua proxy)</li>`)
     .join('');
   res.type('html').send(
     `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>VietStream Addon</title>
