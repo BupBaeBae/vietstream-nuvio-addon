@@ -18,7 +18,7 @@ const PROVIDERS = {
     cdnImage: process.env.KKPHIM_CDN_IMAGE || 'https://phimimg.com',
     referer: 'https://phimapi.com/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('kkphim') : true,
-    proxy: false
+    proxy: true
   },
   ophim: {
     id: 'ophim',
@@ -29,7 +29,7 @@ const PROVIDERS = {
     siteUrl: process.env.OPHIM_SITE_URL || 'https://www.ophim.live',
     referer: 'https://www.ophim.live/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('ophim') : true,
-    proxy: false
+    proxy: true
   },
   nguonc: {
     id: 'nguonc',
@@ -51,7 +51,7 @@ const PROVIDERS = {
     siteUrl: process.env.VNSTREAM_SITE_URL || 'https://cobephim.biz',
     referer: 'https://cobephim.biz/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('vnstream') : true,
-    proxy: false
+    proxy: true
   },
   phim4k: {
     id: 'phim4k',
@@ -61,7 +61,7 @@ const PROVIDERS = {
     siteUrl: process.env.PHIM4K_SITE_URL || 'https://vsmov.com',
     referer: 'https://vsmov.com/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('phim4k') : true,
-    proxy: false
+    proxy: true
   },
   tophim: {
     id: 'tophim',
@@ -70,7 +70,7 @@ const PROVIDERS = {
     apiUrl: process.env.TOPHIM_API_URL || 'https://tophim.top',
     referer: 'https://tophim.top/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('tophim') : true,
-    proxy: false
+    proxy: true
   },
   k20: {
     id: 'k20',
@@ -79,7 +79,7 @@ const PROVIDERS = {
     apiUrl: process.env.K20_API_URL || 'https://sc.k-20.xyz',
     referer: 'https://sc.k-20.xyz/',
     enabled: ENABLED_LIST ? ENABLED_LIST.includes('k20') : true,
-    proxy: false
+    proxy: true
   },
   xem20: {
     id: 'xem20',
@@ -91,7 +91,7 @@ const PROVIDERS = {
     password: process.env.XEM20_PASSWORD || '',
     enabled: !!(process.env.XEM20_LOGIN && process.env.XEM20_PASSWORD) &&
       (ENABLED_LIST ? ENABLED_LIST.includes('xem20') : true),
-    proxy: false,
+    proxy: true,
     authTimeout: parseInt(process.env.XEM20_AUTH_TIMEOUT, 10) || 12000,
     searchTimeout: parseInt(process.env.XEM20_SEARCH_TIMEOUT, 10) || 8000,
     detailTimeout: parseInt(process.env.XEM20_DETAIL_TIMEOUT, 10) || 10000,
